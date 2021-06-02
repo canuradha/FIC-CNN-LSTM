@@ -7,3 +7,9 @@ src/classified_features.pkl
 src/featureset.pkl
 src/state_dict.pt
 src/best.pth
+env
+Img
+Logs
+models
+*/.ipynb_checkpoints
+.ipynb_checkpoints

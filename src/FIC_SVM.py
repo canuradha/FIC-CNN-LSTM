@@ -77,9 +77,9 @@ test_svm_full['type'].value_counts()
 # svm_predicted[1000: 1010]
 #%%
 #------------------------Insert time and session ids to the predicted data-------------------
-svm_predicted = pd.DataFrame(pd.read_pickle('svm_paper_testset_perdictied_proba.pkl'), columns=np.arange(1,6))
+svm_predicted = pd.DataFrame(pd.read_pickle('../Datasets/svm_paper_predicted_with_type_6.pkl'), columns=np.arange(1,7))
 # svm_predicted = svm_predicted.add_prefix('sv_')
-svm_predicted = pd.DataFrame(svm_predicted, columns=np.arange(1,6)).add_prefix('sv_')
+svm_predicted = pd.DataFrame(svm_predicted, columns=np.arange(1,7)).add_prefix('sv_')
 svm_predicted.insert(0,'time',test_svm_full.dropna()['time'].values)
 svm_predicted.insert(0, 'session', test_svm_full.dropna()['session'].values)
 svm_predicted.insert(len(svm_predicted.columns), 'is_bite',np.zeros(svm_predicted.shape[0]))

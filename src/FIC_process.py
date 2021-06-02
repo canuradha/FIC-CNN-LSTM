@@ -5,7 +5,7 @@ import numpy as np
 # from scipy.signal import medfilt
 from scipy.ndimage import median_filter
 
-FIC = pd.read_pickle("../Datasets/FIC/FIC.pkl")
+FIC = pd.read_pickle("../Datasets/FIC.pkl")
 
 df = pd.DataFrame.from_dict(FIC)
 
@@ -40,6 +40,11 @@ for ses_id,session in enumerate(synced_smoothed):
     session[:, 1:4] = axel_readings  
 
 # type(synced_smoothed)
+
+#%%
+with open('../Datasets/smoothed_features.pkl', 'wb') as handle:
+    pkl.dump(synced_smoothed, handle, protocol=-1)
+
 #------------------------Feature Extraction-------------------------------
 #%%
 
@@ -75,7 +80,7 @@ def feature_ext(axis_reading):
             np.ptp(slide),                                                             # range of the values
             np.sum(fft.real*fft.real)/fft.size,                                        # normalized power
             fft.real,                                                                  # discreet fourier transform coefficients
-            abs(slide).sum()                                                                # sum of values (for moving average calculations)
+            abs(slide).sum()                                                           # sum of values (for moving average calculations)
         ] 
     return features
 #%%
@@ -139,7 +144,7 @@ for index, session in enumerate(features_imported):
     features_classified[index] = session_mvts.groupby(level=0).apply(lambda group: pd.concat(group.tolist())).reset_index(level=0)
     # print(type(session_mvts[(1.0)]))
 
-#--------------------------------Add Session Column
+#--------------------------------Add Session Column---------------------------------
 #%%
 rowcount = features_classified.aggregate(lambda a: a.count())['type'].sum()
 
@@ -190,3 +195,83 @@ plt.clf()
 # ------------------------------------accessing multi-indexed datframe----------------------------
 # svm1 = pd.concat([t.loc[1.0], t.loc[2.0]])
 # svm1
+
+
+#==========================Preparation of raw data for CNN==========================================
+#%% 
+features_classified = pd.read_pickle('../Datasets/smoothed_features.pkl')
+#%%
+#--------------------------subtrackting mean and deviding by standard deviation------------
+for index, session in enumerate(features_classified):
+    mean_val = np.mean(session, axis=0).reshape(1,-1)
+    std = np.std(session, axis=0).reshape(1,-1)
+    #------------Excluding Time----------------- 
+    mean_val[0,0] = 0.0
+    std[0,0] = 1.0
+    # print(mean_val.reshape(1,-1).shape)
+    # bc_arr, bc_row_means = np.broadcast_arrays(session, mean_val.reshape(1,-1))
+    features_classified[index] = (session - mean_val)/std
+    # print(session[0:4,1])
+
+
+#%%
+
+for index, session in enumerate(features_classified): 
+
+    mvts = pd.DataFrame(micro_mvmt[index], columns=['start', 'end','type']) 
+
+    if(type(session) == np.ndarray): 
+        session = pd.DataFrame(session, columns=['time', 'ax', 'ay', 'az', 'gx', 'gy', 'gz']) 
+
+    session_mvts = mvts.groupby(by='type').apply(lambda mtype: 
+        mtype.apply( 
+            lambda row: session[(session['time'] > row['start']) & (session['time'] <= row['end'])],  
+            axis=1
+        ) 
+    ) 
+
+    features_classified[index] = session_mvts.groupby(level=0).apply(lambda group: pd.concat(group.tolist())).reset_index(level=0).sort_values(by=['time']).reset_index(drop=True) 
+
+#--------------------------------Add Session Column 
+#%% 
+
+rowcount = features_classified.aggregate(lambda a: a.count())['type'].sum()  
+
+session_no = np.zeros([rowcount,1]) 
+session_id = 0 
+
+for index, session in enumerate(features_classified): 
+    session_no[session_id: session_id + session.shape[0]] = int(index +1) 
+    session.insert(0,'session',session_no[session_id: session_id + session.shape[0]]) 
+    session_id = session_id + int(session.shape[0]) 
+
+#%% 
+
+# features_classified[0].reset_index(drop=True) 
+
+# print(features_classified[0].loc[100:130, 'type': 'time']) 
+
+# micro_mvmt[0][:5, :] 
+
+features_classified[0].head() 
+synced_smoothed[0][:4, 0]
+# %% 
+
+with open('../Datasets/classified_readings_edited.pkl', 'wb') as handle: 
+    pkl.dump(features_classified, handle, protocol=-1) 
+
+
+#%%
+import matplotlib.pyplot as plt
+
+f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+ax1.plot(synced_smoothed[0][:,0], synced_smoothed[0][:, 1])
+ax1.grid()
+ax2.plot(features_classified[0]['time'], features_classified[0]['ax'])
+ax2.grid()
+
+plt.show()
+plt.close()
+plt.clf()
+
+# %%
