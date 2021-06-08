@@ -14,7 +14,8 @@ from torch import randn, flatten
 
 #----------------------------Dataset Arrangement----------------------------
 #%%
-dataset = pd.read_pickle('../Datasets/classified_readings_edited.pkl')
+# dataset = pd.read_pickle('../Datasets/classified_readings_edited.pkl')
+dataset = pd.read_pickle('../Datasets/classified_readings_clipped.pkl')
 train_set, test_set = train_test_split(dataset, test_size=0.5, random_state=42)
 
 test_train, test_test = train_test_split(train_set, test_size=0.3, random_state=42)
@@ -41,8 +42,8 @@ test_dataset_full['isMovement'] = move_label_test
 
 #%%
 sample_rate = 100
-window = 0.4   # window length (seconds)
-step = 0.2  # (seconds)
+window = 0.6   # window length (seconds)
+step = 0.4  # (seconds)
 
 def makeround(dfr: pd.DataFrame, value):
     remainder = dfr.shape[0] % value
@@ -67,7 +68,8 @@ def sliding_window(axis_reading):
         if type(axis_reading) == pd.DataFrame:
             slides.append(slide.to_numpy())
         else:
-            slides.append(slide.max())
+            # slides.append(slide.max())
+            slides.append(np.bincount(slide).argmax())
     return slides
 
 train_X = train_dataset_full.drop(columns=['type', 'time', 'session', 'isMovement'])
@@ -81,6 +83,8 @@ test_y = test_dataset_full['isMovement'].reset_index(drop=True)
 
 train_X_sliced = sliding_window(train_X)
 test_x_sliced = sliding_window(test_X)
+np.shape(train_X_sliced)
+
 #reshaping
 train_X_sliced = np.moveaxis(train_X_sliced, [0,1], [0,-1])
 test_x_sliced = np.moveaxis(test_x_sliced, [0,1], [0,-1])
@@ -96,25 +100,29 @@ CNN_test = TensorDataset(torch.from_numpy(test_x_sliced).float(), torch.from_num
 
 #%%
 
-batch_size = 40
-train_loader = DataLoader(CNN_train, batch_size=batch_size, shuffle=True, drop_last=True)
-test_loader = DataLoader(CNN_test, batch_size=batch_size, shuffle=True, drop_last=True)
+batch_size = 120
+# class_sample_count = np.bincount(train_y_sliced)
+# weights = 1/torch.Tensor(class_sample_count)
+# weights = weights.float()
+# sampler = torch.utils.data.sampler.WeightedRandomSampler(weights, batch_size)
+train_loader = DataLoader(CNN_train, batch_size=batch_size, drop_last=True)
+test_loader = DataLoader(CNN_test, batch_size=batch_size, drop_last=True)
 
 
 #%%
 class BinCNN(nn.Module):
     def __init__(self):
         super(BinCNN, self).__init__()
-        self.conv1 = nn.Conv1d(in_channels=6, out_channels=18, kernel_size=6)
-        self.conv2 = nn.Conv1d(18, 54 , 6)
-        self.conv3 = nn.Conv1d(54,162,6)
-        self.conv4 = nn.Conv1d(162, 324, 6)
-        self.pool = nn.MaxPool1d(kernel_size = 3,stride=1)
+        self.conv1 = nn.Conv1d(in_channels=6, out_channels=18, kernel_size=5)
+        self.conv2 = nn.Conv1d(18, 54 , 5)
+        self.conv3 = nn.Conv1d(54,162,3)
+        self.conv4 = nn.Conv1d(162, 324, 3)
+        self.pool = nn.MaxPool1d(kernel_size = 4,stride=2)
         self.relu = nn.ReLU()
-        self.fc1 = nn.Linear(batch_size*324*12, 240)
+        self.fc1 = nn.Linear(batch_size*162*3, 240)
         self.fc2 = nn.Linear(240, 120)
         self.fc3 = nn.Linear(120, batch_size)
-        self.dropout = nn.Dropout(p=0.5)
+        self.dropout = nn.Dropout(p=0.8)
         self.dropout2 = nn.Dropout(p=0.4)
         self.sm = nn.Sigmoid()
         self.norm1 = nn.BatchNorm1d(18)
@@ -125,15 +133,15 @@ class BinCNN(nn.Module):
     def forward(self, x):
 
         x = self.conv1(x)
-        x = self.norm1(x)
+        # x = self.norm1(x)
         x = self.relu(x)
-        # x = self.dropout(x)
+        x = self.dropout(x)
         x = self.pool(x)
 
         x = self.conv2(x)
-        x = self.norm2(x)
+        # x = self.norm2(x)
         x = self.relu(x)
-        # x = self.dropout(x)
+        x = self.dropout(x)
         x = self.pool(x)
 
         x = self.conv3(x)
@@ -142,11 +150,11 @@ class BinCNN(nn.Module):
         # x = self.dropout(x)
         x = self.pool(x)
 
-        x = self.conv4(x)
-        x = self.norm4(x)
-        x = self.relu(x)
-        # x = self.dropout2(x)
-        x = self.pool(x)
+        # x = self.conv4(x)
+        # x = self.norm4(x)
+        # x = self.dropout(x)
+        # x = self.relu(x)
+        # x = self.pool(x)
 
         x = self.fc1(torch.flatten(x))
         x = self.fc2(x)
@@ -256,7 +264,7 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max')
 # criterion = nn.BCELoss()
 #%%
 #-----------------------Execution----------------------
-epochs = 100
+epochs = 50
 for epoch in range(epochs):
     # if epoch == 35:
     #     optimizer = torch.optim.RMSprop(model.parameters(), lr=1e-6)
@@ -289,13 +297,13 @@ plt.show()
 
 #%%
 #----------------------------------Random Tests-----------------------------
-cn1 = nn.Conv1d(6,32,6)
-cn2 = nn.Conv1d(32, 64, 6)
-cn3 = nn.Conv1d(64, 32, 6)
-cn4 = nn.Conv1d(32, 64, 6)
-m = nn.MaxPool1d(3, stride=1)
-fc = nn.Linear(10*32*11, 6)
-input1 = randn(10, 6, 40)
+cn1 = nn.Conv1d(6,18,5)
+cn2 = nn.Conv1d(18, 54, 5)
+cn3 = nn.Conv1d(54, 162, 3)
+cn4 = nn.Conv1d(162, 324, 3)
+m = nn.MaxPool1d(4, stride=2)
+fc = nn.Linear(20*324*22, 6)
+input1 = randn(120, 6, 60)
 output = cn1(input1)
 print(input1.shape)
 print(output.shape)
@@ -308,16 +316,19 @@ output = cn3(output)
 output = m(output)
 print(output.shape)
 output = cn4(output)
-output = m(output)
+# output = m(output)
 print(output.shape)
-# output = flatten(output)
-# print(output.shape)
-# output = fc(output)
-# output.shape
+output = flatten(output)
+print(output.shape)
+output = fc(output)
+output.shape
 # %%
 model.train()
 for i, para in enumerate(model.parameters()):
     print(f'{i + 1}th parameter tensor:', para.shape)
     print(para)
     print(para.grad)
+# %%
+# t = np.random.choice([0,1], size=(50,))
+np.bincount(train_y_sliced)
 # %%
