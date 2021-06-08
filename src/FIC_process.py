@@ -15,7 +15,7 @@ synced_smoothed = pkl.loads(pkl.dumps(df['signals_proc']))
 micro_mvmt = pkl.loads(pkl.dumps(df['mm_gt']))
 # test[1].shape
 #%%
-synced_data[1].shape
+synced_data[2]
 
 # -----------------Preporcessing--------------------------------
 #%%
@@ -144,6 +144,10 @@ for index, session in enumerate(features_imported):
     features_classified[index] = session_mvts.groupby(level=0).apply(lambda group: pd.concat(group.tolist())).reset_index(level=0)
     # print(type(session_mvts[(1.0)]))
 
+#-------------------------------Clip start and End----------------------------------
+#%%
+
+
 #--------------------------------Add Session Column---------------------------------
 #%%
 rowcount = features_classified.aggregate(lambda a: a.count())['type'].sum()
@@ -200,20 +204,9 @@ plt.clf()
 #==========================Preparation of raw data for CNN==========================================
 #%% 
 features_classified = pd.read_pickle('../Datasets/smoothed_features.pkl')
-#%%
-#--------------------------subtrackting mean and deviding by standard deviation------------
-for index, session in enumerate(features_classified):
-    mean_val = np.mean(session, axis=0).reshape(1,-1)
-    std = np.std(session, axis=0).reshape(1,-1)
-    #------------Excluding Time----------------- 
-    mean_val[0,0] = 0.0
-    std[0,0] = 1.0
-    # print(mean_val.reshape(1,-1).shape)
-    # bc_arr, bc_row_means = np.broadcast_arrays(session, mean_val.reshape(1,-1))
-    features_classified[index] = (session - mean_val)/std
-    # print(session[0:4,1])
 
 
+#---------------------------micro movement Labeling-------------------------------------------------
 #%%
 
 for index, session in enumerate(features_classified): 
@@ -232,7 +225,44 @@ for index, session in enumerate(features_classified):
 
     features_classified[index] = session_mvts.groupby(level=0).apply(lambda group: pd.concat(group.tolist())).reset_index(level=0).sort_values(by=['time']).reset_index(drop=True) 
 
-#--------------------------------Add Session Column 
+
+#--------------------------------Clip start and end from each session-------------------
+#%%
+for index, session in enumerate(features_classified):
+    clip_start = 0
+    clip_end = session.shape[0] - 1
+    isMiddle = False
+    current_type = session['type'][0]
+    for row in session['type']:
+        if(row != 1.0 and row != 6.0):
+            break
+        else:
+            clip_start += 1
+    for row in reversed(session['type']):
+        if row != 1.0 and row != 6.0:
+            break
+        else:
+            if(row != 3.0):
+                isMiddle = True
+            clip_end -= 1
+    features_classified[index] = session.iloc[clip_start:clip_end, :].reset_index(drop=True)
+
+#%%
+#--------------------------subtrackting mean and deviding by standard deviation------------
+for index, session in enumerate(features_classified):
+    mean_val = np.mean(session, axis=0)
+    std = np.std(session, axis=0)
+    #------------Excluding Time and Type----------------- 
+    mean_val['type':'time'] = 0.0
+    std['type':'time'] = 1.0
+
+    # print(mean_val.reshape(1,-1).shape)
+    # bc_arr, bc_row_means = np.broadcast_arrays(session, mean_val.reshape(1,-1))
+    features_classified[index] = (session - mean_val)/std
+    # print(session[0:4,1])
+
+
+#--------------------------------Add Session Column------------------------------------
 #%% 
 
 rowcount = features_classified.aggregate(lambda a: a.count())['type'].sum()  
@@ -253,25 +283,33 @@ for index, session in enumerate(features_classified):
 
 # micro_mvmt[0][:5, :] 
 
-features_classified[0].head() 
-synced_smoothed[0][:4, 0]
+features_classified[0].head(20) 
+# synced_smoothed[0][:4, 0]
 # %% 
 
-with open('../Datasets/classified_readings_edited.pkl', 'wb') as handle: 
+with open('../Datasets/classified_readings_clipped.pkl', 'wb') as handle: 
     pkl.dump(features_classified, handle, protocol=-1) 
 
 
 #%%
 import matplotlib.pyplot as plt
 
-f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
-ax1.plot(synced_smoothed[0][:,0], synced_smoothed[0][:, 1])
-ax1.grid()
-ax2.plot(features_classified[0]['time'], features_classified[0]['ax'])
-ax2.grid()
-
+#%%
+# f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+# ax1.plot(synced_smoothed[0][:,0], synced_smoothed[0][:, 1])
+# ax1.grid()
+# ax2.plot(features_classified[0]['time'], features_classified[0]['ax'])
+# ax2.grid()
+plt.plot(features_classified[0]['time'], features_classified[0]['ax'])
+# plt.plot(features_classified[0]['time'][100000:], features_classified[0]['type'] )
+# plt.plot(synced_smoothed[0][:, 0], synced_smoothed[0][:, 1])
 plt.show()
 plt.close()
 plt.clf()
 
+# %%
+# print(type(np.mean(features_classified[0], axis=0))
+k=np.std(features_classified[1], axis=0)
+k['type':'time'] = 0.0
+k
 # %%
